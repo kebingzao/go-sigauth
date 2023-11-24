@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// 测试 auth 头部拼接逻辑
 func TestBuildAuthorizationHeader(t *testing.T) {
 	t.Run("HasVersion", func(t *testing.T) {
 		res := BuildAuthorizationHeader(Authorization{
@@ -40,6 +41,7 @@ func TestBuildAuthorizationHeader(t *testing.T) {
 	})
 }
 
+// 测试 http 请求 Authorization 头部解析
 func TestParseAuthorizationHeader(t *testing.T) {
 	do := func(authQuery string, header ...string) (Authorization, error) {
 		uri := "http://temp.org"
@@ -83,7 +85,7 @@ func TestParseAuthorizationHeader(t *testing.T) {
 	t.Run("WrongScheme", func(t *testing.T) {
 		_, err := do("", "Bad Key=1")
 		require.Error(t, err)
-		require.Regexp(t, "scheme error", err.Error())
+		require.Regexp(t, "scheme match error", err.Error())
 	})
 
 	t.Run("BadVersion", func(t *testing.T) {
@@ -127,6 +129,7 @@ func TestParseAuthorizationHeader(t *testing.T) {
 	})
 }
 
+// 测试自定义签名名称
 func TestParseAuthorizationHeader_customScheme(t *testing.T) {
 	r := &http.Request{
 		Header: make(http.Header),
@@ -142,15 +145,16 @@ func TestParseAuthorizationHeader_customScheme(t *testing.T) {
 	t.Run("Error", func(t *testing.T) {
 		_, err := ParseAuthorizationHeader(r, "")
 		require.Error(t, err)
-		assert.Regexp(t, "Authorization scheme error", err.Error())
+		assert.Regexp(t, "Authorization scheme match error", err.Error())
 	})
 }
 
 func TestHmacSha256(t *testing.T) {
 	got := HmacSha256([]byte(_secret), []byte("plain to hash"))
-	assert.Equal(t, "2bb18c6fa2c6859703d508842fb1ffa06b967d460d8659477a4297d31c618402", got)
+	assert.Equal(t, "f7138e89b7b6167ee938f0ba9eef0cea4c7080e027bb84ab216acb264fc7d5a3", got)
 }
 
+// 测试签名算法
 func Test_buildDataToSign(t *testing.T) {
 	t.Run("EmptyPath", func(t *testing.T) {
 		r := newRequest("",
@@ -250,15 +254,16 @@ func Test_buildDataToSign(t *testing.T) {
 	})
 }
 
+// 测试完整签名
 func TestAppendSign(t *testing.T) {
 	r := newRequest("", "/", _requestTypeGet, "")
-	signResult := AppendSign(r, "key", _secret, "SCH", _timestamp)
+	signResult := AppendSign(r, _key, _secret, "SCH", _timestamp)
 	require.Equal(t, SignResultType_OK, signResult.Type)
 
 	auth, ok := r.Header[HttpHeaderAuthorization]
 	require.True(t, ok)
 
-	want := "SCH Key=key, Sign=5ad198303bf9a3ad2d6192cdb57f8d3fdead5919089dcab04f4fb914d10ed94a, Timestamp=1661934251, Version=1"
+	want := "SCH Key=testKey, Sign=7583e11e7be21d4b3aa178e8011f18c8d84633403cb0ef62f020ebe121bdc065, Timestamp=1661934251, Version=1"
 	assert.Equal(t, want, auth[0])
 }
 
@@ -267,7 +272,7 @@ func TestSign(t *testing.T) {
 		r := newRequest("", "/", _requestTypeGet, "")
 		signResult := Sign(r, false, _secret, _timestamp)
 		assert.Equal(t, SignResultType_OK, signResult.Type)
-		assert.Equal(t, "5ad198303bf9a3ad2d6192cdb57f8d3fdead5919089dcab04f4fb914d10ed94a", signResult.Sign)
+		assert.Equal(t, "7583e11e7be21d4b3aa178e8011f18c8d84633403cb0ef62f020ebe121bdc065", signResult.Sign)
 	})
 
 	t.Run("OK-Form", func(t *testing.T) {
@@ -278,7 +283,7 @@ func TestSign(t *testing.T) {
 		)
 		signResult := Sign(r, false, _secret, _timestamp)
 		assert.Equal(t, SignResultType_OK, signResult.Type)
-		assert.Equal(t, "16e4722fbedcdc6ed1b9ac368dd6612c59cca9848d638efe353d1de7009ade29", signResult.Sign)
+		assert.Equal(t, "0942cde16e2be07c86a13f41c645120609fbab50bb2f6b49c8a536dcfa1eae41", signResult.Sign)
 	})
 
 	t.Run("OK-Json", func(t *testing.T) {
@@ -289,7 +294,7 @@ func TestSign(t *testing.T) {
 		)
 		signResult := Sign(r, false, _secret, _timestamp)
 		assert.Equal(t, SignResultType_OK, signResult.Type)
-		assert.Equal(t, "a126585a55869af00ca871e5b631e6c94430f20825b9881be4c7b44b84d8bf7e", signResult.Sign)
+		assert.Equal(t, "3e090a4cccdae1e40ae67b2fd137f8ca99cf5e2a63a4e7587d88c247a24182e0", signResult.Sign)
 	})
 
 	t.Run("OK-EmptyParamValue", func(t *testing.T) {
@@ -300,6 +305,6 @@ func TestSign(t *testing.T) {
 		)
 		signResult := Sign(r, false, _secret, _timestamp)
 		assert.Equal(t, SignResultType_OK, signResult.Type)
-		assert.Equal(t, "73c10acdc6ce9b7cb7253eaa3f918bb44a0561f1d887cd7fd4f958ea6142160d", signResult.Sign)
+		assert.Equal(t, "c26dfba4cb6b2bfec76dbd0f0a46b8cc779c2636b7136b100f3ecba7e6a488c8", signResult.Sign)
 	})
 }

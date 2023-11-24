@@ -94,7 +94,7 @@ func ParseAuthorizationHeader(r *http.Request, authScheme string) (Authorization
 	}
 
 	if scheme != authScheme {
-		return auth, fmt.Errorf("Authorization scheme error")
+		return auth, fmt.Errorf("Authorization scheme match error")
 	}
 	auth.AuthScheme = scheme
 

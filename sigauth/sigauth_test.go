@@ -16,10 +16,10 @@ const (
 	_timestamp = 1661934251
 
 	// 测试时表示合法的 access-key 。
-	_key = "key"
+	_key = "testKey"
 
-	// 当 access-key 为 key 时，返回这个密钥。
-	_secret = "secret"
+	// 当 access-key 为 testKey 时，返回这个密钥。
+	_secret = "testSecret"
 )
 
 // baseUrl 可留空。
