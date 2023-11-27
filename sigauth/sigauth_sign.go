@@ -16,7 +16,7 @@ import (
 
 /* 当前文件提供签名算法的实现。 */
 
-// Authorization 记录 SlimAuth 协议规定的 HTTP Authorization 头的内容。
+// Authorization 记录 签名算法协议规定的 HTTP Authorization 头的内容。
 type Authorization struct {
 	AuthScheme string // Authorization 头最前面的 Scheme 部分。
 	Key        string // 请求方的标识。

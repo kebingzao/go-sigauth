@@ -35,7 +35,7 @@ const (
 	// 默认的签名算法版本，当 Authorization 头没有写 Version 字段时，默认为此版本。
 	DefaultSignVersion = 1
 
-	// SlimAuth 协议在 HTTP Authorization 头的 <scheme> 部分，固定值。
+	// HTTP Authorization 头的 <scheme> 部分，固定值。
 	DefaultAuthScheme = "SIG-AUTH"
 
 	// HTTP 协议的 Authorization 头。

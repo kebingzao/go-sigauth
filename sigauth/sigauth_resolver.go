@@ -45,7 +45,7 @@ func (x sigAuthResolver) verifySignature(r *http.Request) {
 		panic("unknown key")
 	}
 
-	// 后续走 SlimAPI 的 decode 过程，需要重读 body 。
+	// 签名
 	signResult := Sign(r, true, secret, auth.Timestamp)
 
 	// 时间戳校验。
