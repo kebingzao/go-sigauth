@@ -29,7 +29,7 @@ func NewSigAuthResolver(authScheme string, secretFinder SecretFinderFunc, timeCh
 	}
 }
 
-func (x sigAuthResolver) verifySignature(r *http.Request) {
+func (x sigAuthResolver) VerifySignature(r *http.Request) {
 	auth, err := ParseAuthorizationHeader(r, x.authScheme)
 	if err != nil {
 		panic("invalid Authorization")

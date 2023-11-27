@@ -112,7 +112,7 @@ func CreateHandlerFunc(sigAuthResolver *sigAuthResolver) http.HandlerFunc {
 			}
 		}()
 		// 进行签名验证
-		sigAuthResolver.verifySignature(r)
+		sigAuthResolver.VerifySignature(r)
 		// 在这边进行校验
 		res.Data = 1
 		w.Write([]byte(res.resJsonString()))

@@ -183,7 +183,6 @@ func AppendSign(r *http.Request, accessKey, secret string, authScheme string, ti
 		Timestamp:  timestamp,
 		Version:    DefaultSignVersion,
 	})
-
 	r.Header.Set(HttpHeaderAuthorization, auth)
 	return res
 }
