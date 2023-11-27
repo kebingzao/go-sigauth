@@ -203,13 +203,137 @@ func TestSigAuthHandler_errors(t *testing.T) {
 }
 
 // 测试时间戳校验。
-func TestSlimAuthApiHandler_timeChecker(t *testing.T) {
+func TestSigAuthApiHandler_timeChecker(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		s := newTestServer(SigAuthHandlerOption{}) // 自动使用 DefaultTimeChecker 。
 
 		r, _ := http.NewRequest(http.MethodGet, s.URL+"?Plus&x=1", nil)
 		signResult := AppendSign(r, _key, _secret, "", time.Now().Unix())
 		require.Equal(t, SignResultType_OK, signResult.Type)
+
+		testRequest(t, r, `{"Code":0,"Message":"","Data":1}`)
+	})
+	t.Run("TimestampError", func(t *testing.T) {
+		s := newTestServer(SigAuthHandlerOption{
+			TimeChecker: DefaultTimeChecker,
+		})
+		// 默认误差在 300s， 这边设置为 1000，那就要报错
+		timestamp := time.Now().Unix() + 1000
+
+		r, _ := http.NewRequest(http.MethodGet, s.URL+"?Plus&x=1", nil)
+		signResult := AppendSign(r, _key, _secret, "", timestamp)
+		require.Equal(t, SignResultType_OK, signResult.Type)
+
+		testRequest(t, r, `{"Code":400,"Message":"timestamp error","Data":null}`)
+	})
+}
+
+func TestSigAuthHandler_ok(t *testing.T) {
+	s := newTestServer(SigAuthHandlerOption{
+		TimeChecker: NoTimeChecker,
+	})
+
+	t.Run("PlusViaForm", func(t *testing.T) {
+		/*
+			data to sign:
+				1661934251
+				POST
+				/
+				aPlus.c
+				2211
+				END
+		*/
+
+		auth := BuildAuthorizationHeader(Authorization{
+			Key:       _key,
+			Sign:      "1898c8c7fcbac3f72a7bd9378b747613b14b8d2c27c12c7f0a8d3402ac485105",
+			Timestamp: _timestamp,
+		})
+
+		r, _ := http.NewRequest(http.MethodPost, s.URL+"?Plus&cc=c&AA=a&bb=.", strings.NewReader("x=11&Y=22"))
+		r.Header.Set(HttpHeaderContentType, ContentTypeForm)
+		r.Header.Set(HttpHeaderAuthorization, auth)
+
+		testRequest(t, r, `{"Code":0,"Message":"","Data":1}`)
+	})
+
+	t.Run("PlusViaJson", func(t *testing.T) {
+		/*
+			data to sign:
+				1661934251
+				POST
+				/
+				Plus
+				{"x":"1","Y":-2}
+				END
+		*/
+
+		auth := BuildAuthorizationHeader(Authorization{
+			Key:       _key,
+			Sign:      "173cf7d616b64a297777d65ebbd19a1c37097bfdf2e0d18273c162e274c0b762",
+			Timestamp: _timestamp,
+		})
+
+		r, _ := http.NewRequest(http.MethodPost, s.URL+"?Plus", strings.NewReader(`{"x":"1","Y":-2}`))
+		r.Header.Set(HttpHeaderContentType, ContentTypeJson)
+		r.Header.Set(HttpHeaderAuthorization, auth)
+
+		testRequest(t, r, `{"Code":0,"Message":"","Data":1}`)
+	})
+	t.Run("GetKeyViaAuthInQuery", func(t *testing.T) {
+		/*
+			data to sign:
+				1661934251
+				POST
+				/
+				GetKey
+				{}
+				END
+		*/
+
+		auth := BuildAuthorizationHeader(Authorization{
+			Key:       _key,
+			Sign:      "3edb49ae24a03a730303745b9a1643726bbc2df6edf6da934e5ac425d3433991",
+			Timestamp: _timestamp,
+		})
+
+		uri := s.URL + "?GetKey&~auth=" + url.QueryEscape(auth)
+		r, _ := http.NewRequest(http.MethodPost, uri, strings.NewReader(`{}`))
+		r.Header.Set(HttpHeaderContentType, ContentTypeJson)
+
+		testRequest(t, r, `{"Code":0,"Message":"","Data":1}`)
+	})
+}
+
+func TestSigAuthApiHandler_customScheme(t *testing.T) {
+	const scheme = "CUSTOM-SCHEME"
+
+	s := newTestServer(SigAuthHandlerOption{
+		AuthScheme:  scheme,
+		TimeChecker: NoTimeChecker,
+	})
+
+	t.Run("PlusViaForm", func(t *testing.T) {
+		/*
+			data to sign:
+				1661934251
+				POST
+				/
+				aPlus1122
+				bc
+				END
+		*/
+
+		auth := BuildAuthorizationHeader(Authorization{
+			AuthScheme: scheme,
+			Key:        _key,
+			Sign:       "8f1adc3b9109a1808c4e1be6fb61fb5a0d93188e5a26a755ec346c30c04177c0",
+			Timestamp:  _timestamp,
+		})
+
+		r, _ := http.NewRequest(http.MethodPost, s.URL+"?Plus&x=11&AA=a&y=22", strings.NewReader("c=c&b=b"))
+		r.Header.Set(HttpHeaderContentType, ContentTypeForm)
+		r.Header.Set(HttpHeaderAuthorization, auth)
 
 		testRequest(t, r, `{"Code":0,"Message":"","Data":1}`)
 	})
