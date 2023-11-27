@@ -2,14 +2,17 @@ package sigauth
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -36,7 +39,7 @@ type Res struct {
 
 func NewRes() Res {
 	res := Res{
-		Code:    200,
+		Code:    0,
 		Message: "",
 		Data:    nil,
 	}
@@ -111,7 +114,7 @@ func CreateHandlerFunc(sigAuthResolver *sigAuthResolver) http.HandlerFunc {
 		// 进行签名验证
 		sigAuthResolver.verifySignature(r)
 		// 在这边进行校验
-		res.Message = "OK"
+		res.Data = 1
 		w.Write([]byte(res.resJsonString()))
 	}
 }
@@ -146,5 +149,68 @@ func TestSigAuthHandler_errors(t *testing.T) {
 	t.Run("NoMethod", func(t *testing.T) {
 		r, _ := http.NewRequest(http.MethodGet, s.URL, nil)
 		testRequest(t, r, `{"Code":400,"Message":"invalid Authorization","Data":null}`)
+	})
+
+	t.Run("InvalidAuth", func(t *testing.T) {
+		r, _ := http.NewRequest(http.MethodGet, s.URL+"?Plus", nil)
+		testRequest(t, r, `{"Code":400,"Message":"invalid Authorization","Data":null}`)
+	})
+
+	t.Run("InvalidAuthVersion", func(t *testing.T) {
+		r, _ := http.NewRequest(http.MethodGet, s.URL+"?Plus", nil)
+		r.Header.Set(HttpHeaderAuthorization, fmt.Sprintf("%s Key=%s, Sign=sign, Timestamp=1, Version=-1", DefaultAuthScheme, _key))
+
+		testRequest(t, r, `{"Code":400,"Message":"unsupported signature version","Data":null}`)
+	})
+	t.Run("UnknownKey", func(t *testing.T) {
+		r, _ := http.NewRequest(http.MethodGet, s.URL+"?Plus", nil)
+		r.Header.Set(HttpHeaderAuthorization, fmt.Sprintf("%s Key=unknown, Sign=sign, Timestamp=1", DefaultAuthScheme))
+
+		testRequest(t, r, `{"Code":400,"Message":"unknown key","Data":null}`)
+	})
+	t.Run("NoContentType", func(t *testing.T) {
+		r, _ := http.NewRequest(http.MethodPost, s.URL+"?Plus", nil)
+		r.Header.Set(HttpHeaderAuthorization, fmt.Sprintf("%s Key=%s, Sign=sign, Timestamp=1", DefaultAuthScheme, _key))
+
+		testRequest(t, r, `{"Code":400,"Message":"missing Content-Type","Data":null}`)
+	})
+	t.Run("UnsupportedContentType", func(t *testing.T) {
+		r, _ := http.NewRequest(http.MethodPost, s.URL+"?Plus", strings.NewReader("{}"))
+		r.Header.Set(HttpHeaderAuthorization, fmt.Sprintf("%s Key=%s, Sign=sign, Timestamp=1", DefaultAuthScheme, _key))
+		r.Header.Set(HttpHeaderContentType, "Invalid-Content-Type")
+
+		testRequest(t, r, `{"Code":400,"Message":"unsupported Content-Type","Data":null}`)
+	})
+	t.Run("InvalidForm", func(t *testing.T) {
+		r, _ := http.NewRequest(http.MethodPost, s.URL+"?Plus", strings.NewReader(";=;"))
+		r.Header.Set(HttpHeaderAuthorization, fmt.Sprintf("%s Key=%s, Sign=sign, Timestamp=1", DefaultAuthScheme, _key))
+		r.Header.Set(HttpHeaderContentType, ContentTypeForm)
+
+		testRequest(t, r, `{"Code":400,"Message":"invalid request body","Data":null}`)
+	})
+	t.Run("BadSign", func(t *testing.T) {
+		auth := BuildAuthorizationHeader(Authorization{
+			Key:       _key,
+			Sign:      "bad",
+			Timestamp: _timestamp,
+		})
+
+		r, _ := http.NewRequest(http.MethodGet, s.URL+"?Plus&x=1", nil)
+		r.Header.Set(HttpHeaderAuthorization, auth)
+
+		testRequest(t, r, `{"Code":400,"Message":"signature mismatch, want b7843d37ae086202d5f3e44b49b1b20ebcaf9a668347e839602a0d41156bb68d, got bad","Data":null}`)
+	})
+}
+
+// 测试时间戳校验。
+func TestSlimAuthApiHandler_timeChecker(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		s := newTestServer(SigAuthHandlerOption{}) // 自动使用 DefaultTimeChecker 。
+
+		r, _ := http.NewRequest(http.MethodGet, s.URL+"?Plus&x=1", nil)
+		signResult := AppendSign(r, _key, _secret, "", time.Now().Unix())
+		require.Equal(t, SignResultType_OK, signResult.Type)
+
+		testRequest(t, r, `{"Code":0,"Message":"","Data":1}`)
 	})
 }
