@@ -119,7 +119,12 @@ func CreateHandlerFunc(sigAuthResolver *sigAuthResolver) http.HandlerFunc {
 // 起一个测试 server
 func newTestServer(op SigAuthHandlerOption) *httptest.Server {
 	op.SecretFinder = finderForTest
-	sigAuthResolver := NewSigAuthHandler(op)
+	timeChecker := op.TimeChecker
+	// 没有指定的话，就走默认的时间检查器
+	if timeChecker == nil {
+		timeChecker = DefaultTimeChecker
+	}
+	sigAuthResolver := NewSigAuthResolver(op.AuthScheme, op.SecretFinder, timeChecker)
 	handlerFunc := CreateHandlerFunc(sigAuthResolver)
 	ts := httptest.NewServer(http.HandlerFunc(handlerFunc))
 	return ts

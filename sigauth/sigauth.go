@@ -64,12 +64,3 @@ type SigAuthHandlerOption struct {
 	// 若为 nil ，将自动使用 [DefaultTimeChecker] ；若不需要校验，可给定 [NoTimeChecker] 。
 	TimeChecker TimeCheckerFunc
 }
-
-// NewSigAuthHandler 创建 SlimAuth 协议的 [webapi.ApiHandler] 。
-func NewSigAuthHandler(op SigAuthHandlerOption) *sigAuthResolver {
-	timeChecker := op.TimeChecker
-	if timeChecker == nil {
-		timeChecker = DefaultTimeChecker
-	}
-	return NewSigAuthResolver(op.AuthScheme, op.SecretFinder, timeChecker)
-}
