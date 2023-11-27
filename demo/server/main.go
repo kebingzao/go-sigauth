@@ -82,7 +82,8 @@ func verifySignature(r *http.Request) {
 	}
 	op := sigauth.SigAuthHandlerOption{
 		SecretFinder: secretFinder,
-		TimeChecker:  sigauth.DefaultTimeChecker,
+		// TimeChecker:  sigauth.NoTimeChecker,
+		TimeChecker: sigauth.DefaultTimeChecker,
 	}
 	sigAuthResolver := sigauth.NewSigAuthResolver(op.AuthScheme, op.SecretFinder, op.TimeChecker)
 	sigAuthResolver.VerifySignature(r)

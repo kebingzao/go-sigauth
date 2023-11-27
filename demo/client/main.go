@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sigauth/sigauth"
 	"strings"
 	"time"
@@ -105,13 +106,14 @@ func main() {
 		r.Header.Set(sigauth.HttpHeaderContentType, sigauth.ContentTypeJson)
 		setSign(r, "key", SigAuthKeySecret[1][1], time.Now().Unix())
 	})
-	// post json 将 auth 放到 参数 ~auth
+	// post json 将 auth 放到 参数 ~auth, 注意，如果要这个方式要成功的话， server 那边要将 timeCheck 关闭，不然 sign 会一直变
 	// auth := sigauth.BuildAuthorizationHeader(sigauth.Authorization{
 	// 	Key:       "testkey1",
-	// 	Sign:      "c8e9432fbb005cbb267c30ef65f5e17f5395c43ae1a1af79e2591e4606a97410",
-	// 	Timestamp: time.Now().Unix(),
+	// 	Sign:      "fb954c9a49c0914c9c4d7af2fc4c0d0b20e7d6060ebd37dedb0b03edac138694",
+	// 	Timestamp: 1661934251,
 	// })
-	// tryRequest(http.MethodPost, setUrl("sigauth/hello", fmt.Sprintf("msg=123456&~auth=%s", url.QueryEscape(auth))), strings.NewReader(`{"x":"1","Y":2}`), "", func(r *http.Request) {
-	// 	r.Header.Set(sigauth.HttpHeaderContentType, sigauth.ContentTypeJson)
-	// })
+	auth := "SIG-AUTH Key=testkey1, Sign=fb954c9a49c0914c9c4d7af2fc4c0d0b20e7d6060ebd37dedb0b03edac138694, Timestamp=1661934251"
+	tryRequest(http.MethodPost, setUrl("sigauth/hello", fmt.Sprintf("msg=123456&~auth=%s", url.QueryEscape(auth))), strings.NewReader(`{"x":"1","Y":2}`), "", func(r *http.Request) {
+		r.Header.Set(sigauth.HttpHeaderContentType, sigauth.ContentTypeJson)
+	})
 }
