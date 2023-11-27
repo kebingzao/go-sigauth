@@ -36,7 +36,7 @@ const (
 	DefaultSignVersion = 1
 
 	// SlimAuth 协议在 HTTP Authorization 头的 <scheme> 部分，固定值。
-	DefaultAuthScheme = "SLIM-AUTH"
+	DefaultAuthScheme = "SIG-AUTH"
 
 	// HTTP 协议的 Authorization 头。
 	HttpHeaderAuthorization = "Authorization"
@@ -50,3 +50,26 @@ const (
 // 若给定的 accessKey 没有绑定，返回空字符串。
 // 若获取过程出错，直接 panic ，其错误处理方式与普通的 API 方法一致。
 type SecretFinderFunc func(accessKey string) string
+
+// SigAuthHandlerOption 用于初始化 。
+type SigAuthHandlerOption struct {
+	// 指定 HTTP Authorization 头的 scheme 部分的值。
+	// 若为空，则自动使用默认值 [DefaultAuthScheme] 。
+	AuthScheme string
+
+	// 用于查找签名所需的 secret 。必须提供。
+	SecretFinder SecretFinderFunc
+
+	// 用于校验签名信息中携带的时间戳的有效性。
+	// 若为 nil ，将自动使用 [DefaultTimeChecker] ；若不需要校验，可给定 [NoTimeChecker] 。
+	TimeChecker TimeCheckerFunc
+}
+
+// NewSigAuthHandler 创建 SlimAuth 协议的 [webapi.ApiHandler] 。
+func NewSigAuthHandler(op SigAuthHandlerOption) *sigAuthResolver {
+	timeChecker := op.TimeChecker
+	if timeChecker == nil {
+		timeChecker = DefaultTimeChecker
+	}
+	return NewSigAuthResolver(op.AuthScheme, op.SecretFinder, timeChecker)
+}

@@ -13,7 +13,7 @@ type sigAuthResolver struct {
 
 // NewSlimAuthApiNameResolver 返回 SlimAuth 协议的 [webapi.ApiNameResolver] 。
 // 它增加了签名校验，其余都和 SlimAPI 一样。
-func NewSlimAuthApiNameResolver(authScheme string, secretFinder SecretFinderFunc, timeChecker TimeCheckerFunc) *sigAuthResolver {
+func NewSigAuthResolver(authScheme string, secretFinder SecretFinderFunc, timeChecker TimeCheckerFunc) *sigAuthResolver {
 	if secretFinder == nil {
 		panic("secretFinder must be provided")
 	}

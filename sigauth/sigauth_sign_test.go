@@ -18,7 +18,7 @@ func TestBuildAuthorizationHeader(t *testing.T) {
 			Timestamp: 123,
 			Version:   321,
 		})
-		assert.Equal(t, "SLIM-AUTH Key=kkk, Sign=sss, Timestamp=123, Version=321", res)
+		assert.Equal(t, "SIG-AUTH Key=kkk, Sign=sss, Timestamp=123, Version=321", res)
 	})
 
 	t.Run("NoVersion", func(t *testing.T) {
@@ -27,7 +27,7 @@ func TestBuildAuthorizationHeader(t *testing.T) {
 			Sign:      "ss",
 			Timestamp: 123,
 		})
-		assert.Equal(t, "SLIM-AUTH Key=kk, Sign=ss, Timestamp=123", res)
+		assert.Equal(t, "SIG-AUTH Key=kk, Sign=ss, Timestamp=123", res)
 	})
 
 	t.Run("CustomScheme", func(t *testing.T) {
@@ -89,19 +89,19 @@ func TestParseAuthorizationHeader(t *testing.T) {
 	})
 
 	t.Run("BadVersion", func(t *testing.T) {
-		_, err := do("", "SLIM-AUTH Version=abc")
+		_, err := do("", "SIG-AUTH Version=abc")
 		require.Error(t, err)
 		require.Regexp(t, "version error", err.Error())
 	})
 
 	t.Run("BadTimestamp", func(t *testing.T) {
-		_, err := do("SLIM-AUTH Timestamp=abc")
+		_, err := do("SIG-AUTH Timestamp=abc")
 		require.Error(t, err)
 		require.Regexp(t, "timestamp error", err.Error())
 	})
 
 	t.Run("OK-FromHeader", func(t *testing.T) {
-		auth, err := do("", "SLIM-AUTH Key=kk, Sign=ss, Timestamp=1661843240, Version=123")
+		auth, err := do("", "SIG-AUTH Key=kk, Sign=ss, Timestamp=1661843240, Version=123")
 		require.NoError(t, err)
 
 		assert.Equal(t, "kk", auth.Key)
@@ -111,7 +111,7 @@ func TestParseAuthorizationHeader(t *testing.T) {
 	})
 
 	t.Run("OK-DefaultVersion", func(t *testing.T) {
-		auth, err := do("", "SLIM-AUTH Key=kk")
+		auth, err := do("", "SIG-AUTH Key=kk")
 		require.NoError(t, err)
 
 		assert.Equal(t, "kk", auth.Key)
@@ -119,7 +119,7 @@ func TestParseAuthorizationHeader(t *testing.T) {
 	})
 
 	t.Run("OK-FromQuery", func(t *testing.T) {
-		auth, err := do("SLIM-AUTH Key=kk, Sign=ss, Timestamp=1661843240, Version=123")
+		auth, err := do("SIG-AUTH Key=kk, Sign=ss, Timestamp=1661843240, Version=123")
 		require.NoError(t, err)
 
 		assert.Equal(t, "kk", auth.Key)

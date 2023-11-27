@@ -62,7 +62,7 @@ func BuildAuthorizationHeader(auth Authorization) string {
 //
 // 说明：
 //   - 每个 Key 前的空格被忽略。 key-value 对的顺序不做要求。
-//   - Scheme 必须是匹配给定的 @authScheme ，若给定值为空，则使用默认值“SLIM-AUTH”。
+//   - Scheme 必须是匹配给定的 @authScheme ，若给定值为空，则使用默认值“SIG-AUTH”。
 //   - Timestamp 签名时的 UNIX 时间戳，单位是秒。
 //   - Version 可省略，省略时默认为 1 。
 func ParseAuthorizationHeader(r *http.Request, authScheme string) (Authorization, error) {
