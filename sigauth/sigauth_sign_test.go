@@ -1,6 +1,7 @@
 package sigauth
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -18,7 +19,7 @@ func TestBuildAuthorizationHeader(t *testing.T) {
 			Timestamp: 123,
 			Version:   321,
 		})
-		assert.Equal(t, "SIG-AUTH Key=kkk, Sign=sss, Timestamp=123, Version=321", res)
+		assert.Equal(t, fmt.Sprintf("%s Key=kkk, Sign=sss, Timestamp=123, Version=321", DefaultAuthScheme), res)
 	})
 
 	t.Run("NoVersion", func(t *testing.T) {
@@ -27,7 +28,7 @@ func TestBuildAuthorizationHeader(t *testing.T) {
 			Sign:      "ss",
 			Timestamp: 123,
 		})
-		assert.Equal(t, "SIG-AUTH Key=kk, Sign=ss, Timestamp=123", res)
+		assert.Equal(t, fmt.Sprintf("%s Key=kk, Sign=ss, Timestamp=123", DefaultAuthScheme), res)
 	})
 
 	t.Run("CustomScheme", func(t *testing.T) {
@@ -89,19 +90,19 @@ func TestParseAuthorizationHeader(t *testing.T) {
 	})
 
 	t.Run("BadVersion", func(t *testing.T) {
-		_, err := do("", "SIG-AUTH Version=abc")
+		_, err := do("", fmt.Sprintf("%s Version=abc", DefaultAuthScheme))
 		require.Error(t, err)
 		require.Regexp(t, "version error", err.Error())
 	})
 
 	t.Run("BadTimestamp", func(t *testing.T) {
-		_, err := do("SIG-AUTH Timestamp=abc")
+		_, err := do(fmt.Sprintf("%s Timestamp=abc", DefaultAuthScheme))
 		require.Error(t, err)
 		require.Regexp(t, "timestamp error", err.Error())
 	})
 
 	t.Run("OK-FromHeader", func(t *testing.T) {
-		auth, err := do("", "SIG-AUTH Key=kk, Sign=ss, Timestamp=1661843240, Version=123")
+		auth, err := do("", fmt.Sprintf("%s Key=kk, Sign=ss, Timestamp=1661843240, Version=123", DefaultAuthScheme))
 		require.NoError(t, err)
 
 		assert.Equal(t, "kk", auth.Key)
@@ -111,7 +112,7 @@ func TestParseAuthorizationHeader(t *testing.T) {
 	})
 
 	t.Run("OK-DefaultVersion", func(t *testing.T) {
-		auth, err := do("", "SIG-AUTH Key=kk")
+		auth, err := do("", fmt.Sprintf("%s Key=kk", DefaultAuthScheme))
 		require.NoError(t, err)
 
 		assert.Equal(t, "kk", auth.Key)
@@ -119,7 +120,7 @@ func TestParseAuthorizationHeader(t *testing.T) {
 	})
 
 	t.Run("OK-FromQuery", func(t *testing.T) {
-		auth, err := do("SIG-AUTH Key=kk, Sign=ss, Timestamp=1661843240, Version=123")
+		auth, err := do(fmt.Sprintf("%s Key=kk, Sign=ss, Timestamp=1661843240, Version=123", DefaultAuthScheme))
 		require.NoError(t, err)
 
 		assert.Equal(t, "kk", auth.Key)
