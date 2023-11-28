@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 )
 
 var (
+	//go:embed static/client.html
+	_clientDemoPage string
 	// 设置各个组的 key 和 secret
 	SigAuthKeySecret = [][]string{
 		{"testkey1", "secret1"},
@@ -44,7 +47,9 @@ func initServer() {
 	// 普通没有校验的请求
 	serverMux.HandleFunc("/hello", helloHandler)
 	// 需要 sigAuth 的请求
-	serverMux.HandleFunc("/sigauth/hello", sigAuthHandler(helloHandler))
+	serverMux.HandleFunc("/sigauth/hello", corsAuthHandler(sigAuthHandler(helloHandler)))
+	// 渲染 html demo 页面
+	serverMux.HandleFunc("/demo/", htmlDemoHandler)
 	// 开启 HTTP 服务。
 	server := &http.Server{
 		Addr:    ":8012",
@@ -54,6 +59,14 @@ func initServer() {
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// 给前端设置 cors 跨域
+func setCors(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Allow-Headers", "origin, content-type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 }
 
 // 针对 hello 的请求
@@ -67,6 +80,11 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 		res.Data = string(respBytes)
 	}
 	w.Write([]byte(res.resJsonString()))
+}
+
+// 针对 html demo 页面的渲染
+func htmlDemoHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(_clientDemoPage))
 }
 
 // 验签
@@ -87,6 +105,14 @@ func verifySignature(r *http.Request) {
 	}
 	sigAuthResolver := sigauth.NewSigAuthResolver(op.AuthScheme, op.SecretFinder, op.TimeChecker)
 	sigAuthResolver.VerifySignature(r)
+}
+
+// cors 验证中间件, 便于前端 demo 页面可以解耦部署在其他的 web server
+func corsAuthHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		setCors(w, r)
+		handler(w, r)
+	}
 }
 
 // sigauth 验证中间件

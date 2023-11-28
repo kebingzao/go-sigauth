@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>AirDroid Remote Control Demonstration</title>
+
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.2.1/css/bootstrap.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.2.39/vue.global.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/hmac-sha256.min.js"></script>
+</head>
+
+<style>
+    .card-title {
+        text-align: center;
+        margin: 10px;
+    }
+</style>
+
+<body>
+    <div id="app">
+        <main>
+            <div><h2 class="card-title">SIG-AUTH 前端测试界面</h2></div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <label class="col-2 col-form-label">host</label>
+                        <div class="col-10">
+                            <input type="text" class="form-control" v-model="host"
+                                placeholder="后端请求 host+port, 不包含最后的最后的斜杠 比如 https://example.com" />
+                        </div>
+                    </div>
+                    <div class="row">
+                        <label class="col-2 col-form-label">path</label>
+                        <div class="col-10">
+                            <input type="text" class="form-control" v-model="path"
+                                placeholder="后端请求 path 路径，为空的话，默认为 /, 忽略后面的 ? 之后的 query 参数，如果是 query 参数的话，请到 path 这一栏填入" />
+                        </div>
+                    </div>
+                    <div class="row mt-1">
+                        <label class="col-2 col-form-label">Key</label>
+                        <div class="col-10">
+                            <input type="text" class="form-control" v-model="key"
+                                placeholder="密钥组中的 key" />
+                        </div>
+                    </div>
+
+                    <div class="row mt-1">
+                        <label class="col-2 col-form-label">Secret</label>
+                        <div class="col-10">
+                            <input type="text" class="form-control" v-model="secret"
+                                placeholder="密钥组中的 secret" />
+                        </div>
+                    </div>
+
+                    <div class="row mt-1">
+                        <label class="col-2 col-form-label">Query Params</label>
+                        <div class="col-10">
+                            <input type="text" class="form-control" v-model="query"
+                                placeholder="path 后面的请求参数, 不需要填 ?, 直接 key1=value1&key2=value2 即可，比如  name=zach&age=14" />
+                        </div>
+                    </div>
+
+                    <div class="row mt-1">
+                        <label class="col-2 col-form-label">Request Method</label>
+                        <div class="col-10">
+                            <select class="form-control" v-model="requestMethod">
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mt-1" v-show="requestMethod === 'POST'">
+                        <label class="col-2 col-form-label">Content-Type(POST)</label>
+                        <div class="col-10">
+                            <select class="form-control" v-model="contentType">
+                                <option value="application/json">application/json</option>
+                                <option value="application/x-www-form-urlencoded">application/x-www-form-urlencoded</option>
+                                <option value="multipart/form-data">multipart/form-data</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mt-1" v-show="requestMethod === 'POST'">
+                        <label class="col-2 col-form-label">POST body</label>
+                        <div class="col-10">
+                            <textarea class="form-control" v-model="postBody" rows="6"
+                                placeholder='post body 内容, 输入标准的 json 串, 类似于
+{
+    "name":"zach",
+    "age": 14
+}
+如果上面 content-type 选的是 application/x-www-form-urlencoded, 那么这个 json 就会被转换为参数 query 的方式，上例的 body 体就会变成 name=zach&age=14 
+
+' >
+                            </textarea>
+                        </div>
+                    </div>
+
+
+
+                    <div class="row mt-3 justify-content-md-center">
+                        <button class="col-3 btn btn-primary" class="form-control" @click="sendRequest">
+                            Start
+                        </button>
+                    </div>
+
+                    <div v-show="error" class="row mt-3 alert alert-danger">
+                        {{error}}
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="requestInfo" class="card mt-1">
+                <div class="card-header">
+                    <strong>Request information</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row mt-1">
+                        <label class="col-2 col-form-label">URL</label>
+                        <div class="col-10">
+                            <input type="text" class="form-control" readonly :value="requestInfo.url" />
+                        </div>
+                    </div>
+
+                    <div class="row mt-1">
+                        <label class="col-2 col-form-label">String to sign</label>
+                        <div class="col-10">
+                            <textarea class="form-control"
+                                rows="9">{{requestInfo.stringToSign}}</textarea>
+                        </div>
+                    </div>
+
+                    <div class="row mt-1">
+                        <label class="col-2 col-form-label">Signature</label>
+                        <div class="col-10">
+                            <input type="text" class="form-control" readonly :value="requestInfo.sign" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="requestInfo" class="card mt-1">
+                <div class="card-header">
+                    <strong>Final request</strong>
+                </div>
+                <div class="card-body">
+                    <div>
+                        <pre>
+{{requestInfo.method}} {{requestInfo.url}}
+Content-Type: {{requestInfo.contentType}}
+Authorization: {{requestInfo.auth}}
+{{requestInfo.body ? "\n" + requestInfo.body : ""}}
+Response Result: {{requestInfo.result}}
+                        </pre>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+</body>
+
+<script>
+    /** Utilities for the signature processing. */
+    class SignUtil {
+        static getSortString(obj) {
+            let ObjString = '';
+            const keys = Object.keys(obj).sort();
+            for (const key of keys) {
+                const value = obj[key];
+                ObjString += value === '' ? key : value;
+            }
+            return ObjString;
+        }
+        static getQueryParams(query) {
+            let theRequest = {};
+            let strs = query.split('&');
+            for (let i = 0; i < strs.length; i++) {
+                const index = strs[i].indexOf('=')
+                theRequest[strs[i].substr(0, index)] = unescape(strs[i].substr(index + 1));
+            }
+            return theRequest;
+        }
+        /**
+         * Returns the string to sign.
+         * @param {string} path - The path from the URL.
+         * @param {number} timestamp - The timestamp for signing.
+         * @param {object} params - The parameters of the request. A null or an empty object means the method is GET.
+         * @returns {string}
+         */
+        static buildStringToSign(path, method, timestamp, queryParams, contentType, postBody) {
+            let body = '';
+            let query = '';
+            // 处理 query 参数
+            if(queryParams) {
+                query += SignUtil.getSortString(SignUtil.getQueryParams(queryParams));
+            }
+            if (method === 'POST') {
+                if(contentType && contentType.indexOf('application/json')>=0) {
+                    body += JSON.stringify(postBody)+'\n';
+                } else {
+                    body += SignUtil.getSortString(postBody)+'\n';
+                }
+            }
+            const res = `${timestamp}\n${method}\n${path}\n${query}\n${body}END`;
+            return res;
+        }
+
+        /** Get the current UNIX timestamp. */
+        static timestamp() {
+            return Math.floor(Date.now() / 1000);
+        }
+
+        /**
+         * Calculates the HMAC-SHA256 hash via crypto-js.
+         * @param {string} secret - Your secret.
+         * @param {string} stringToSign - Use buildStringToSign() to get this value.
+         * @returns {string} - The hexadecimal lowercase hash.
+         */
+        static calculateSignature(secret, stringToSign) {
+            let hash = CryptoJS.HmacSHA256(stringToSign, secret);
+            let hex = CryptoJS.enc.Hex.stringify(hash)
+            return hex;
+        }
+
+        /**
+         * Returns the value for the HTTP Authorization header.
+         * @param {string} key - Your key.
+         * @param {string} sign - Use calculateSignature() to get this value.
+         * @param {number} timestamp - The timestamp returned by buildStringToSign().
+         * @returns {string}
+         */
+        static buildAuthHeader(key, sign, timestamp) {
+            let res = `SIG-AUTH Key=${key}, Sign=${sign}, Timestamp=${timestamp}, Version=1`;
+            return res;
+        }
+    }
+
+    /** Used to request the OpenAir API. */
+    class OpenAirApiCaller {
+        constructor(host, key, secret) {
+            this.host = host;
+            this.key = key;
+            this.secret = secret;
+        }
+
+        /**
+         * Performs the request, returns a JSON which contains a Promise of the response.
+         * @param {string} url - the request URL.
+         * @param {object} params - The parameters of the request. A null or an empty object means the method is GET.
+         * @returns {object}
+         */
+        requestAsync(path, requestObj) {
+            const url = `${this.host}${path}${requestObj.query ? ("?" + requestObj.query) : "" }`;
+            const timestamp = SignUtil.timestamp();
+            const stringToSign = SignUtil.buildStringToSign(path, requestObj.method, timestamp, requestObj.query, requestObj.contentType, requestObj.postBody);
+            const sign = SignUtil.calculateSignature(this.secret, stringToSign);
+            const auth = SignUtil.buildAuthHeader(this.key, sign, timestamp);
+            let contentType = requestObj.contentType
+
+            const fetchOp = {
+                method: "GET",
+                headers: {
+                    "Authorization": auth,
+                },
+            };
+
+            if(requestObj.method === 'POST'){
+                fetchOp.method = "POST";
+                if(contentType === "application/x-www-form-urlencoded"){
+                    let body = new URLSearchParams();
+                    if(Object.keys(requestObj.postBody).length){
+                        for (const [k, v] of Object.entries(requestObj.postBody)) {
+                            body.append(k, v);
+                        }
+                    }
+                    fetchOp.headers["Content-Type"] = contentType;
+                    fetchOp.body = body.toString();
+                }else{
+                    // 如果是 json
+                    fetchOp.headers["Content-Type"] = contentType;
+                    fetchOp.body = requestObj.postBody
+                }
+            }
+
+            return {
+                method: fetchOp.method,
+                path: path,
+                url: url,
+                timestamp: timestamp,
+                stringToSign: stringToSign,
+                sign: sign,
+                auth: auth,
+                contentType: contentType,
+                body: fetchOp.body,
+                response: fetch(url, fetchOp),
+            };
+        }
+    }
+</script>
+
+<script>
+    const app = Vue.createApp({
+        data() {
+            return {
+                host: "http://localhost:8012",
+                path: "/sigauth/hello",
+                key: "testkey1",
+                secret: "secret1",
+                query: "msg=123456",
+                requestMethod: "GET",
+                contentType: "application/json",
+                postBody: "",
+
+                // An non-empty string when something goes wrong.
+                error: "",
+
+                // Stores the information of the last request.
+                requestInfo: null,
+            }
+        },
+
+        methods: {
+            prepareCaller() {
+                this.error = "";
+                this.requestInfo = null;
+
+                if (!this.host) {
+                    this.error = "Host must be provided.";
+                    return null;
+                }
+
+                if (!this.key) {
+                    this.error = "Key must be provided.";
+                    return null;
+                }
+
+                if (!this.secret) {
+                    this.error = "Secret must be provided.";
+                    return null;
+                }
+
+                // 如果有选择 post 的话，并且 post 参数有值的话，那么要校验输入的 json 是否合格
+                if(this.requestMethod === "POST" && this.postBody !== ""){
+                    try{
+                        let postBody = JSON.parse(this.postBody)
+                        if(this.postBody[0] !== "{"){
+                            this.error = "post body 必须是一个 json 串";
+                            return null;
+                        }
+                    }catch(e){
+                        this.error = "post body 必须是一个严格的 json 串，可以到 http://www.bejson.com/ 格式化看看";
+                        return null;
+                    }
+                }
+
+                return new OpenAirApiCaller(this.host, this.key, this.secret);
+            },
+            // 发送请求
+            async sendRequest() {
+                const caller = this.prepareCaller();
+                if (!caller) {
+                    return;
+                }
+
+                const requestInfo = caller.requestAsync(this.path.split("?")[0], {
+                    method: this.requestMethod,
+                    query: this.query,
+                    contentType: this.contentType,
+                    postBody: this.postBody ?? JSON.parse(this.postBody)
+                });
+
+                this.requestInfo = requestInfo;
+
+                const response = await requestInfo.response;
+                if (!response.ok) {
+                    this.error = `HTTP ${response.status} ${response.statusText}`;
+                    return;
+                }
+
+                const json = await response.json();
+                this.requestInfo.result = json;
+                if (json.Code) {
+                    this.error = `(${json.Code}) ${json.Message}`;
+                    return;
+                }
+            }
+        },
+
+        mounted() {}
+    });
+
+    app.mount('#app');
+</script>
+
+</html>
