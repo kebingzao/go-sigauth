@@ -150,7 +150,8 @@
 {{requestInfo.method}} {{requestInfo.url}}
 Content-Type: {{requestInfo.contentType}}
 Authorization: {{requestInfo.auth}}
-{{requestInfo.body ? "\n" + requestInfo.body : ""}}
+Body: {{requestInfo.body}}
+-----------------------------------------
 Response Result: {{requestInfo.result}}
                         </pre>
                     </div>
@@ -197,7 +198,11 @@ Response Result: {{requestInfo.result}}
             }
             if (method === 'POST') {
                 if(contentType && contentType.indexOf('application/json')>=0) {
-                    body += JSON.stringify(postBody) + '\n';
+                    if(postBody){
+                        body += JSON.stringify(postBody) + '\n';
+                    }else{
+                        body += '\n';
+                    }
                 } else {
                     body += SignUtil.getSortString(postBody)+'\n';
                 }
@@ -280,7 +285,12 @@ Response Result: {{requestInfo.result}}
                 }else{
                     // 如果是 json
                     fetchOp.headers["Content-Type"] = contentType;
-                    fetchOp.body = JSON.stringify(requestObj.postBody)
+                    if(requestObj.postBody){
+                        fetchOp.body = JSON.stringify(requestObj.postBody)
+                    }else{
+                        fetchOp.body = null
+                    }
+                    
                 }
             }
 
