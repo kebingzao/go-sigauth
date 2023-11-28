@@ -3,13 +3,16 @@
 
 <head>
     <meta charset="utf-8">
-    <title>AirDroid Remote Control Demonstration</title>
+    <title>SIG-AUTH 前端测试界面</title>
 
-    <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.2.1/css/bootstrap.min.css" />
+<!-- 线上 cdn
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.2.1/css/bootstrap.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.2.39/vue.global.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/hmac-sha256.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script> 
+-->
+    <link rel="stylesheet" href="./css/bootstrap.min.css" />
+    <script src="./js/vue.global.min.js"></script>
+    <script src="./js/crypto-js.min.js"></script>
 </head>
 
 <style>
@@ -79,7 +82,6 @@
                             <select class="form-control" v-model="contentType">
                                 <option value="application/json">application/json</option>
                                 <option value="application/x-www-form-urlencoded">application/x-www-form-urlencoded</option>
-                                <option value="multipart/form-data">multipart/form-data</option>
                             </select>
                         </div>
                     </div>
@@ -162,129 +164,169 @@ Response Result: {{requestInfo.result}}
 </body>
 
 <script>
-    /** Utilities for the signature processing. */
-    class SignUtil {
-        static getSortString(obj) {
-            let ObjString = '';
-            const keys = Object.keys(obj).sort();
-            for (const key of keys) {
-                const value = obj[key];
-                ObjString += value === '' ? key : value;
-            }
-            return ObjString;
+    const ContentTypeJSON = "application/json"
+    const ContentTypeForm = "application/x-www-form-urlencoded"
+    /** 签名类 **/
+    class SigAuth {
+        /* 密钥组的 key */
+        #key
+        /* 密钥组的 secret */
+        #secret
+        /* 签名的时间戳 */
+        #timestamp
+        constructor(key, secret){
+            this.#key = key
+            this.#secret = secret
         }
-        static getQueryParams(query) {
-            let theRequest = {};
-            let strs = query.split('&');
+        /**
+         * 将对象按 UTF-8 字节顺序升序排好之后换成 key-value，然后取出 value 的值，拼接起来， value 为空，就取 key 的值
+         * {"a":"1","b":"2"} 就会变成 12
+         * {"a":"","b":"2"} 就会变成 a2
+         * @param {object} obj - 一个对象
+         */
+        #getSortString(obj){
+            let objString = ''
+            const keys = Object.keys(obj).sort()
+            for (const key of keys) {
+                const value = obj[key]
+                objString += value === '' ? key : value
+            }
+            return objString
+        }
+        /**
+         * 将参数串转为对象，比如 name=zach&age=14 就会变成 {"name":"zach","age":14}
+         * @param {string} query - url 后面的参数串， 比如 name=zach&age=14
+         */
+        #getQueryParams(query){
+            let theRequest = {}
+            let strs = query.split('&')
             for (let i = 0; i < strs.length; i++) {
                 const index = strs[i].indexOf('=')
-                theRequest[strs[i].substr(0, index)] = unescape(strs[i].substr(index + 1));
+                theRequest[strs[i].substr(0, index)] = unescape(strs[i].substr(index + 1))
             }
-            return theRequest;
+            return theRequest
         }
         /**
-         * Returns the string to sign.
-         * @param {string} path - The path from the URL.
-         * @param {number} timestamp - The timestamp for signing.
-         * @param {object} params - The parameters of the request. A null or an empty object means the method is GET.
+         * 返回要签名的签名串
+         * @param {string} path - 路径
+         * @param {string} method - 请求的方法
+         * @param {string} queryParams - url 后面的参数串， 比如 name=zach&age=14
+         * @param {string} contentType - 请求的 contentType
+         * @param {object} postBody - 请求的 body 对象
          * @returns {string}
          */
-        static buildStringToSign(path, method, timestamp, queryParams, contentType, postBody) {
-            let body = '';
-            let query = '';
+        #buildStringToSign(path, method, queryParams, contentType, postBody) {
+            let body = ''
+            let query = ''
             // 处理 query 参数
             if(queryParams) {
-                query += SignUtil.getSortString(SignUtil.getQueryParams(queryParams));
+                query += this.#getSortString(this.#getQueryParams(queryParams))
             }
+            // 处理 post 请求
             if (method === 'POST') {
-                if(contentType && contentType.indexOf('application/json')>=0) {
+                // 如果是 json, 就直接将整个 json 串放进去
+                if(contentType && contentType.indexOf(ContentTypeJSON)>=0) {
                     if(postBody){
-                        body += JSON.stringify(postBody) + '\n';
+                        body += JSON.stringify(postBody) + '\n'
                     }else{
-                        body += '\n';
+                        body += '\n'
                     }
                 } else {
-                    body += SignUtil.getSortString(postBody)+'\n';
+                    // 如果是 form 的方式，就取 value 拼接
+                    body += this.#getSortString(postBody) + '\n'
                 }
             }
-            const res = `${timestamp}\n${method}\n${path}\n${query}\n${body}END`;
-            return res;
-        }
-
-        /** Get the current UNIX timestamp. */
-        static timestamp() {
-            return Math.floor(Date.now() / 1000);
+            return `${this.#timestamp}\n${method}\n${path}\n${query}\n${body}END`
         }
 
         /**
-         * Calculates the HMAC-SHA256 hash via crypto-js.
-         * @param {string} secret - Your secret.
-         * @param {string} stringToSign - Use buildStringToSign() to get this value.
-         * @returns {string} - The hexadecimal lowercase hash.
+         * 使用 HMAC-SHA256 进行签名
+         * @param {string} stringToSign - 通过 buildStringToSign() 得到签名串
+         * @returns {string} - 返回 16 进制 hash.
          */
-        static calculateSignature(secret, stringToSign) {
-            let hash = CryptoJS.HmacSHA256(stringToSign, secret);
+        #calculateSignature(stringToSign) {
+            let hash = CryptoJS.HmacSHA256(stringToSign, this.#secret)
             let hex = CryptoJS.enc.Hex.stringify(hash)
-            return hex;
+            return hex
         }
-
         /**
-         * Returns the value for the HTTP Authorization header.
-         * @param {string} key - Your key.
+         * 拼接 HTTP Authorization 头部值
          * @param {string} sign - Use calculateSignature() to get this value.
-         * @param {number} timestamp - The timestamp returned by buildStringToSign().
          * @returns {string}
          */
-        static buildAuthHeader(key, sign, timestamp) {
-            let res = `SIG-AUTH Key=${key}, Sign=${sign}, Timestamp=${timestamp}, Version=1`;
-            return res;
+        #buildAuthHeader(sign) {
+            return `SIG-AUTH Key=${this.#key}, Sign=${sign}, Timestamp=${this.#timestamp}, Version=1`
+        }
+        /**
+         * 获取签名信息
+         * @param {string} path - 路径
+         * @param {string} method - 请求的方法
+         * @param {string} query - url 后面的参数串， 比如 name=zach&age=14
+         * @param {string} contentType - 请求的 contentType
+         * @param {object} postBody - 请求的 body 对象
+         * @returns {object} 签名相关信息
+         */
+        getSigAuth(path, method, query, contentType, postBody){
+            this.#timestamp = Math.floor(Date.now() / 1000)
+            // 计算签名串
+            const stringToSign = this.#buildStringToSign(path, method, query, contentType, postBody)
+            // 加密变成签名
+            const sign = this.#calculateSignature(stringToSign)
+            // 合成 auth 头部
+            const auth = this.#buildAuthHeader(sign)
+            return {
+                "auth": auth,
+                "sign": sign,
+                "stringToSign": stringToSign,
+                "timestamp": this.#timestamp
+            }
         }
     }
 
-    /** Used to request the OpenAir API. */
-    class OpenAirApiCaller {
+
+    /** API Caller. */
+    class ApiCaller {
         constructor(host, key, secret) {
-            this.host = host;
-            this.key = key;
-            this.secret = secret;
+            this.host = host
+            this.key = key
+            this.secret = secret
         }
 
         /**
-         * Performs the request, returns a JSON which contains a Promise of the response.
-         * @param {string} url - the request URL.
-         * @param {object} params - The parameters of the request. A null or an empty object means the method is GET.
+         * 进行签名并且请求后端
+         * @param {string} path - 请求路径
+         * @param {object} requestObj - request 对象体
          * @returns {object}
          */
         requestAsync(path, requestObj) {
-            const url = `${this.host}${path}${requestObj.query ? ("?" + requestObj.query) : "" }`;
-            const timestamp = SignUtil.timestamp();
-            const stringToSign = SignUtil.buildStringToSign(path, requestObj.method, timestamp, requestObj.query, requestObj.contentType, requestObj.postBody);
-            const sign = SignUtil.calculateSignature(this.secret, stringToSign);
-            const auth = SignUtil.buildAuthHeader(this.key, sign, timestamp);
+            const url = `${this.host}${path}${requestObj.query ? ("?" + requestObj.query) : "" }`
             let contentType = requestObj.contentType
+            // 进行签名
+            const sigAuth = new SigAuth(this.key, this.secret)
+            const {auth, sign, stringToSign, timestamp} = sigAuth.getSigAuth(path, requestObj.method, requestObj.query, requestObj.contentType, requestObj.postBody)
 
             const fetchOp = {
                 method: "GET",
                 headers: {
                     "Authorization": auth,
                 },
-            };
-
+            }
+            // 处理 post 请求
             if(requestObj.method === 'POST'){
-                fetchOp.method = "POST";
-                if(contentType === "application/x-www-form-urlencoded"){
-                    let body = new URLSearchParams();
+                fetchOp.method = "POST"
+                // 处理 post form 
+                if(contentType === ContentTypeForm){
+                    let body = new URLSearchParams()
                     if(Object.keys(requestObj.postBody).length){
                         for (const [k, v] of Object.entries(requestObj.postBody)) {
-                            body.append(k, v);
+                            body.append(k, v)
                         }
                     }
-                    fetchOp.headers["Content-Type"] = contentType;
-                    console.log(body.toString())
-                    fetchOp.body = body.toString();
+                    fetchOp.headers["Content-Type"] = contentType
+                    fetchOp.body = body.toString()
                 }else{
                     // 如果是 json
-                    fetchOp.headers["Content-Type"] = contentType;
+                    fetchOp.headers["Content-Type"] = contentType
                     if(requestObj.postBody){
                         fetchOp.body = JSON.stringify(requestObj.postBody)
                     }else{
@@ -323,31 +365,31 @@ Response Result: {{requestInfo.result}}
                 contentType: "application/json",
                 postBody: `{"name":"22"}`,
 
-                // An non-empty string when something goes wrong.
+                // 错误提示
                 error: "",
 
-                // Stores the information of the last request.
+                // 请求资讯
                 requestInfo: null,
             }
         },
 
         methods: {
             prepareCaller() {
-                this.error = "";
-                this.requestInfo = null;
+                this.error = ""
+                this.requestInfo = null
 
                 if (!this.host) {
-                    this.error = "Host must be provided.";
+                    this.error = "Host must be provided."
                     return null;
                 }
 
                 if (!this.key) {
-                    this.error = "Key must be provided.";
+                    this.error = "Key must be provided."
                     return null;
                 }
 
                 if (!this.secret) {
-                    this.error = "Secret must be provided.";
+                    this.error = "Secret must be provided."
                     return null;
                 }
 
@@ -356,22 +398,22 @@ Response Result: {{requestInfo.result}}
                     try{
                         let postBody = JSON.parse(this.postBody)
                         if(this.postBody[0] !== "{"){
-                            this.error = "post body 必须是一个 json 串";
-                            return null;
+                            this.error = "post body 必须是一个 json 串"
+                            return null
                         }
                     }catch(e){
-                        this.error = "post body 必须是一个严格的 json 串，可以到 http://www.bejson.com/ 格式化看看";
-                        return null;
+                        this.error = "post body 必须是一个严格的 json 串，可以到 http://www.bejson.com/ 格式化看看"
+                        return null
                     }
                 }
 
-                return new OpenAirApiCaller(this.host, this.key, this.secret);
+                return new ApiCaller(this.host, this.key, this.secret)
             },
             // 发送请求
             async sendRequest() {
-                const caller = this.prepareCaller();
+                const caller = this.prepareCaller()
                 if (!caller) {
-                    return;
+                    return
                 }
 
                 const requestInfo = caller.requestAsync(this.path.split("?")[0], {
@@ -379,29 +421,30 @@ Response Result: {{requestInfo.result}}
                     query: this.query,
                     contentType: this.contentType,
                     postBody: this.postBody ? JSON.parse(this.postBody) : ""
-                });
+                })
 
-                this.requestInfo = requestInfo;
+                this.requestInfo = requestInfo
 
-                const response = await requestInfo.response;
+                const response = await requestInfo.response
                 if (!response.ok) {
-                    this.error = `HTTP ${response.status} ${response.statusText}`;
+                    this.error = `HTTP ${response.status} ${response.statusText}`
                     return;
                 }
-
-                const json = await response.json();
-                this.requestInfo.result = json;
+                // 获取返回值
+                const json = await response.json()
+                this.requestInfo.result = json
+                // 处理失败情况
                 if (json.Code) {
-                    this.error = `(${json.Code}) ${json.Message}`;
-                    return;
+                    this.error = `(${json.Code}) ${json.Message}`
+                    return
                 }
             }
         },
 
         mounted() {}
-    });
+    })
 
-    app.mount('#app');
+    app.mount('#app')
 </script>
 
 </html>
