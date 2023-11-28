@@ -94,13 +94,10 @@
     "age": 14
 }
 如果上面 content-type 选的是 application/x-www-form-urlencoded, 那么这个 json 就会被转换为参数 query 的方式，上例的 body 体就会变成 name=zach&age=14 
-
 ' >
                             </textarea>
                         </div>
                     </div>
-
-
 
                     <div class="row mt-3 justify-content-md-center">
                         <button class="col-3 btn btn-primary" class="form-control" @click="sendRequest">
@@ -129,7 +126,7 @@
                     <div class="row mt-1">
                         <label class="col-2 col-form-label">String to sign</label>
                         <div class="col-10">
-                            <textarea class="form-control"
+                            <textarea class="form-control" readonly
                                 rows="9">{{requestInfo.stringToSign}}</textarea>
                         </div>
                     </div>
@@ -200,7 +197,7 @@ Response Result: {{requestInfo.result}}
             }
             if (method === 'POST') {
                 if(contentType && contentType.indexOf('application/json')>=0) {
-                    body += JSON.stringify(postBody)+'\n';
+                    body += JSON.stringify(postBody) + '\n';
                 } else {
                     body += SignUtil.getSortString(postBody)+'\n';
                 }
@@ -278,11 +275,12 @@ Response Result: {{requestInfo.result}}
                         }
                     }
                     fetchOp.headers["Content-Type"] = contentType;
+                    console.log(body.toString())
                     fetchOp.body = body.toString();
                 }else{
                     // 如果是 json
                     fetchOp.headers["Content-Type"] = contentType;
-                    fetchOp.body = requestObj.postBody
+                    fetchOp.body = JSON.stringify(requestObj.postBody)
                 }
             }
 
@@ -313,7 +311,7 @@ Response Result: {{requestInfo.result}}
                 query: "msg=123456",
                 requestMethod: "GET",
                 contentType: "application/json",
-                postBody: "",
+                postBody: `{"name":"22"}`,
 
                 // An non-empty string when something goes wrong.
                 error: "",
@@ -370,7 +368,7 @@ Response Result: {{requestInfo.result}}
                     method: this.requestMethod,
                     query: this.query,
                     contentType: this.contentType,
-                    postBody: this.postBody ?? JSON.parse(this.postBody)
+                    postBody: this.postBody ? JSON.parse(this.postBody) : ""
                 });
 
                 this.requestInfo = requestInfo;
