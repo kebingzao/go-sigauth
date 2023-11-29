@@ -111,6 +111,11 @@ func verifySignature(r *http.Request) {
 func corsAuthHandler(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		setCors(w, r)
+		// 过滤掉 options 方法
+		if r.Method == "OPTIONS" {
+			w.Write([]byte("ok"))
+			return
+		}
 		handler(w, r)
 	}
 }
