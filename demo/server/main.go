@@ -1,13 +1,16 @@
 package main
 
 import (
+	"crypto/rand"
 	_ "embed"
+	"encoding/base32"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"sigauth/sigauth"
+	"strings"
 )
 
 var (
@@ -42,6 +45,24 @@ func (r *Res) resJsonString() (resJson string) {
 	return
 }
 
+// 基于 base32 编码，其将输入 n 字节，输出 n*8/5 个字符。
+// 避免末尾的 padding 需要 n 可以被5整除。
+// 若 n 不能被5整除，末尾的 padding （等号）会被自动去掉。
+func randomBase32(n int) string {
+	src := make([]byte, n)
+	n, err := rand.Read(src)
+	if err != nil {
+		panic(err)
+	}
+
+	dst := make([]byte, base32.StdEncoding.EncodedLen(n))
+	base32.StdEncoding.Encode(dst, src)
+
+	res := string(dst)
+	res = strings.TrimRight(res, "=")
+	return res
+}
+
 func initServer() {
 	serverMux := http.NewServeMux()
 	// 普通没有校验的请求
@@ -50,6 +71,8 @@ func initServer() {
 	serverMux.HandleFunc("/sigauth/hello", corsAuthHandler(sigAuthHandler(helloHandler)))
 	// 渲染 html demo 页面
 	serverMux.HandleFunc("/demo/", htmlDemoHandler)
+	// 生成一对 key 和 secret
+	serverMux.HandleFunc("/generateAccessKey", generateAccessKey)
 	// 开启 HTTP 服务。
 	server := &http.Server{
 		Addr:    ":8012",
@@ -92,6 +115,16 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 		respBytes, _ := io.ReadAll(r.Body)
 		res.Data = string(respBytes)
 	}
+	retrunRes(w, r, res)
+}
+
+// 生成一对 key 和 secret
+func generateAccessKey(w http.ResponseWriter, r *http.Request) {
+	res := NewRes()
+	res.Data = struct {
+		Key    string
+		Secret string
+	}{randomBase32(15), randomBase32(35)}
 	retrunRes(w, r, res)
 }
 
