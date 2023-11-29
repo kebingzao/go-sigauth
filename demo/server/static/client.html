@@ -74,6 +74,7 @@
                             <select class="form-control" v-model="requestMethod">
                                 <option value="GET">GET</option>
                                 <option value="POST">POST</option>
+                                <option value="JSONP">JSONP</option>
                             </select>
                         </div>
                     </div>
@@ -166,8 +167,11 @@ Response Result: {{requestInfo.result}}
 </body>
 
 <script>
+    // 一些常量
     const ContentTypeJSON = "application/json"
     const ContentTypeForm = "application/x-www-form-urlencoded"
+
+
     /** 签名类 **/
     class SigAuth {
         /* 密钥组的 key */
@@ -293,63 +297,155 @@ Response Result: {{requestInfo.result}}
             this.key = key
             this.secret = secret
         }
+        /**
+         * 发送 fetch 请求
+         * @param {string} url - 请求 url
+         * @param {string} auth - 签名头部
+         * @param {object} requestObj - request 对象体
+         * @returns {Promise}
+         */
+        sendFetchRequest(url, auth, requestObj){
+            return new Promise(resolve => {
+                let contentType = requestObj.contentType
+                const fetchOp = {
+                    method: "GET",
+                    headers: {
+                        "Authorization": auth,
+                    },
+                }
+                // 处理 post 请求
+                if(requestObj.method === 'POST'){
+                    fetchOp.method = "POST"
+                    // 处理 post form 
+                    if(contentType === ContentTypeForm){
+                        let body = new URLSearchParams()
+                        if(Object.keys(requestObj.postBody).length){
+                            for (const [k, v] of Object.entries(requestObj.postBody)) {
+                                body.append(k, v)
+                            }
+                        }
+                        fetchOp.headers["Content-Type"] = contentType
+                        fetchOp.body = body.toString()
+                    }else{
+                        // 如果是 json
+                        fetchOp.headers["Content-Type"] = contentType
+                        if(requestObj.postBody){
+                            fetchOp.body = JSON.stringify(requestObj.postBody)
+                        }else{
+                            fetchOp.body = null
+                        }
+                        
+                    }
+                }
+                const returnSuccess = result => {
+                    resolve({
+                        result: result,
+                        body: fetchOp.body,
+                        err: null
+                    })
+                }
+                const returnFail = err => {
+                    resolve({
+                        result: null,
+                        body: fetchOp.body,
+                        err: err
+                    })
+                }
+                // 接下来开始请求
+                fetch(url, fetchOp).then(response => response.json())
+                .then(returnSuccess)
+                .catch(returnFail)
+            })
+        }
 
         /**
          * 进行签名并且请求后端
          * @param {string} path - 请求路径
          * @param {object} requestObj - request 对象体
-         * @returns {object}
+         * @returns {Promise}
          */
         requestAsync(path, requestObj) {
-            const url = `${this.host}${path}${requestObj.query ? ("?" + requestObj.query) : "" }`
-            let contentType = requestObj.contentType
-            // 进行签名
-            const sigAuth = new SigAuth(this.key, this.secret)
-            const {auth, sign, stringToSign, timestamp} = sigAuth.getSigAuth(path, requestObj.method, requestObj.query, requestObj.contentType, requestObj.postBody)
-
-            const fetchOp = {
-                method: "GET",
-                headers: {
-                    "Authorization": auth,
-                },
-            }
-            // 处理 post 请求
-            if(requestObj.method === 'POST'){
-                fetchOp.method = "POST"
-                // 处理 post form 
-                if(contentType === ContentTypeForm){
-                    let body = new URLSearchParams()
-                    if(Object.keys(requestObj.postBody).length){
-                        for (const [k, v] of Object.entries(requestObj.postBody)) {
-                            body.append(k, v)
-                        }
-                    }
-                    fetchOp.headers["Content-Type"] = contentType
-                    fetchOp.body = body.toString()
-                }else{
-                    // 如果是 json
-                    fetchOp.headers["Content-Type"] = contentType
-                    if(requestObj.postBody){
-                        fetchOp.body = JSON.stringify(requestObj.postBody)
-                    }else{
-                        fetchOp.body = null
-                    }
-                    
+            return new Promise(resolve => {
+                // 判断是不是 jsonp
+                const isJsop = requestObj.method === "JSONP"
+                const callbackName = '_jsonp' + new Date().getTime()
+                if(isJsop){
+                    // 如果是 isJsop, 要将 callback 加入到 query 中
+                    requestObj.query += `&callback=${callbackName}`
                 }
-            }
+                let url = `${this.host}${path}${requestObj.query ? ("?" + requestObj.query) : "" }`
+                let method = isJsop ? "GET" : requestObj.method
+                // 进行签名
+                const sigAuth = new SigAuth(this.key, this.secret)
+                const {auth, sign, stringToSign, timestamp} = sigAuth.getSigAuth(path, method, requestObj.query, requestObj.contentType, requestObj.postBody)
 
-            return {
-                method: fetchOp.method,
-                path: path,
-                url: url,
-                timestamp: timestamp,
-                stringToSign: stringToSign,
-                sign: sign,
-                auth: auth,
-                contentType: contentType,
-                body: fetchOp.body,
-                response: fetch(url, fetchOp),
-            };
+                const returnInfo = responseObj => {
+                    return resolve({
+                        method: requestObj.method,
+                        path: path,
+                        url: url,
+                        timestamp: timestamp,
+                        stringToSign: stringToSign,
+                        sign: sign,
+                        auth: auth,
+                        contentType: requestObj.contentType,
+                        body: responseObj.body,
+                        result: responseObj.result,
+                        err: responseObj.err,
+                    })
+                }
+                // 处理 jsonp 请求
+                if(isJsop){
+                    // 添加 auth 参数
+                    url += `&~auth=${encodeURIComponent(auth)}`
+                    this.sendJsopRequest(url, callbackName).then(data => {
+                        returnInfo({
+                            body: null,
+                            result: data,
+                            err: null
+                        })
+                    },err => {
+                        returnInfo({
+                            body: null,
+                            result: null,
+                            err: err
+                        })
+                    })
+                }else{
+                    // 走 fetch
+                    this.sendFetchRequest(url, auth, requestObj).then(returnInfo)
+                }
+                
+            })
+        }
+        /**
+         * 使用 jsonp 发送请求
+         * @param {string} url - 请求 url
+         * @param {string} callbackName - jsonp callback 参数，因为要参与签名，所以这边从外部传入
+         * @returns {Promise}
+         */ 
+        sendJsopRequest(url, callbackName){
+            return new Promise((resolve, reject) => {
+                let script = document.createElement("script")
+                window[callbackName] = response => {
+                    try {
+                        resolve(response)
+                    } catch (e) {
+                        reject(e)
+                    } finally {
+                        delete window[callbackName]
+                        script.parentNode.removeChild(script)
+                    }
+                }
+                script.src = url
+                //出错处理
+                script.onerror = () => {
+                    resolve({error:"error"})
+                    delete window[callbackName]
+                    script.parentNode.removeChild(script)
+                }
+                document.body.appendChild(script)
+            })
         }
     }
 </script>
@@ -412,34 +508,30 @@ Response Result: {{requestInfo.result}}
                 return new ApiCaller(this.host, this.key, this.secret)
             },
             // 发送请求
-            async sendRequest() {
+            sendRequest() {
                 const caller = this.prepareCaller()
                 if (!caller) {
                     return
                 }
 
-                const requestInfo = caller.requestAsync(this.path.split("?")[0], {
+                caller.requestAsync(this.path.split("?")[0], {
                     method: this.requestMethod,
                     query: this.query,
                     contentType: this.contentType,
                     postBody: this.postBody ? JSON.parse(this.postBody) : ""
+                }).then(info => {
+                    this.requestInfo = info
+                    let json = info.result
+                    if(info.err){
+                        this.error = `HTTP fail -> ${this.requestInfo.err}`
+                        return
+                    }
+                    // 处理失败情况
+                    if (json.Code) {
+                        this.error = `(${json.Code}) ${json.Message}`
+                        return
+                    }
                 })
-
-                this.requestInfo = requestInfo
-
-                const response = await requestInfo.response
-                if (!response.ok) {
-                    this.error = `HTTP ${response.status} ${response.statusText}`
-                    return;
-                }
-                // 获取返回值
-                const json = await response.json()
-                this.requestInfo.result = json
-                // 处理失败情况
-                if (json.Code) {
-                    this.error = `(${json.Code}) ${json.Message}`
-                    return
-                }
             }
         },
 

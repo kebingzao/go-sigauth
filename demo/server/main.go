@@ -69,6 +69,19 @@ func setCors(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 }
 
+// 返回结果值
+func retrunRes(w http.ResponseWriter, r *http.Request, res Res) {
+	urlValues := r.URL.Query()
+	callback := urlValues.Get("callback")
+	// 如果是 jsonp 格式的话，就返回对应格式
+	fmt.Println(callback, "==>", res.resJsonString())
+	if callback != "" {
+		w.Write([]byte(fmt.Sprintf("%s(%s)", callback, res.resJsonString())))
+	} else {
+		w.Write([]byte(res.resJsonString()))
+	}
+}
+
 // 针对 hello 的请求
 func helloHandler(w http.ResponseWriter, r *http.Request) {
 	res := NewRes()
@@ -79,7 +92,7 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 		respBytes, _ := io.ReadAll(r.Body)
 		res.Data = string(respBytes)
 	}
-	w.Write([]byte(res.resJsonString()))
+	retrunRes(w, r, res)
 }
 
 // 针对 html demo 页面的渲染
@@ -130,7 +143,7 @@ func sigAuthHandler(handler http.HandlerFunc) http.HandlerFunc {
 				res.Code = 400
 				res.Message = err.(string)
 				fmt.Printf("%s => %s\n", r.URL, res.Message)
-				w.Write([]byte(res.resJsonString()))
+				retrunRes(w, r, res)
 			}
 		}()
 		// 进行签名验证
