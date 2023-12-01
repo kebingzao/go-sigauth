@@ -207,8 +207,8 @@ Response Result: {{requestInfo.result}}
             let theRequest = {}
             let strs = query.split('&')
             for (let i = 0; i < strs.length; i++) {
-                const index = strs[i].indexOf('=')
-                theRequest[strs[i].substr(0, index)] = unescape(strs[i].substr(index + 1))
+                let tempArr = strs[i].split('=')
+                theRequest[tempArr[0]] = tempArr.length > 1 ? tempArr[1] : tempArr[0]
             }
             return theRequest
         }
